@@ -51,6 +51,7 @@ export interface FeedEntry {
     },
     title: string|null,
     link:  string|null,
+    content: string|null,
     /**
      * Unique key to identify the specific fetch across entries.
      */
@@ -303,6 +304,7 @@ export class FeedReader {
                         url: url,
                     },
                     title: item.title ? stripHtml(item.title) : null,
+                    content: item.contentSnippet ? item.contentSnippet : (item.content ? stripHtml(item.content) : null),
                     link: item.link || null,
                     fetchKey
                 };
