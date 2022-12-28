@@ -160,10 +160,18 @@ export class FeedConnection extends BaseConnection implements IConnection {
             message += `: ${entryDetails}`;
         }
 
+        // SC: overwrite format if enough infos
+        if (entry.title && entry.link && (this.state.label || entry.feed.title)) {
+            message = `[${this.state.label || entry.feed.title}](${entry.link}): ${entry.title}`;
+            if (entry.content) {
+                message += `\n\n${entry.content}`;
+            }
+        }
+
         await this.as.botIntent.sendEvent(this.roomId, {
-            msgtype: 'm.notice',
+            msgtype: 'm.text',
             format: "org.matrix.custom.html",
-            formatted_body: md.renderInline(message),
+            formatted_body: md.render(message),
             body: message,
         });
     }
