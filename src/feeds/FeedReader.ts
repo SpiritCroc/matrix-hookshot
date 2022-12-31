@@ -304,7 +304,7 @@ export class FeedReader {
                         url: url,
                     },
                     title: item.title ? stripHtml(item.title) : null,
-                    content: item.contentSnippet ? item.contentSnippet : (item.content ? stripHtml(item.content) : null),
+                    content: item.content ? item.content : null,
                     link: item.link || null,
                     fetchKey
                 };

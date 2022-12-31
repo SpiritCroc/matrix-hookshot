@@ -9,6 +9,7 @@ import { BaseConnection } from "./BaseConnection";
 import markdown from "markdown-it";
 import { Connection, ProvisionConnectionOpts } from "./IConnection";
 import { GetConnectionsResponseItem } from "../provisioning/api";
+import { NodeHtmlMarkdown, NodeHtmlMarkdownOptions } from 'node-html-markdown';
 const log = new Logger("FeedConnection");
 const md = new markdown();
 
@@ -36,6 +37,12 @@ export type FeedResponseItem = GetConnectionsResponseItem<FeedConnectionState, F
 
 const MAX_LAST_RESULT_ITEMS = 5;
 const VALIDATION_FETCH_TIMEOUT_MS = 5000;
+
+const nhm = new NodeHtmlMarkdown(
+  /* options (optional) */ {},
+  /* customTransformers (optional) */ undefined,
+  /* customCodeBlockTranslators (optional) */ undefined
+);
 
 @Connection
 export class FeedConnection extends BaseConnection implements IConnection {
@@ -154,7 +161,21 @@ export class FeedConnection extends BaseConnection implements IConnection {
         if (entry.title && entry.link && (this.state.label || entry.feed.title)) {
             message = `[${this.state.label || entry.feed.title}](${entry.link}): ${entry.title}`;
             if (entry.content) {
-                message += `\n\n${entry.content}`;
+                let content = nhm.translate(entry.content);
+                // Try to make relative links absolute
+                try {
+                    const parsedUrl = new URL(entry.link);
+                    const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+                    content = content.replace(/\[(.*?)\]\(\/(.*?)\)/g, '[$1](' + baseUrl + '/$2)');
+                } catch (ex) {
+                    log.info("Error trying to add absolute url to content " + ex.stack);
+                }
+                content = content
+                        // Replace pictures by their alt text
+                        .replace(/!\[(.*?)\]\(.*?\)/g, '$1')
+                        // Remove code environments
+                        .replace(/\`/g, '');
+                message += `\n\n${content}`;
             }
         }
 
