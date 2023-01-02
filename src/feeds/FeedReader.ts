@@ -7,6 +7,7 @@ import { MessageQueue } from "../MessageQueue";
 
 import Ajv from "ajv";
 import axios, { AxiosResponse } from "axios";
+import iconv from "iconv-lite";
 import Parser from "rss-parser";
 import Metrics from "../Metrics";
 import UserAgent from "../UserAgent";
@@ -15,6 +16,16 @@ import { StatusCodes } from "http-status-codes";
 import { FormatUtil } from "../FormatUtil";
 
 const log = new Logger("FeedReader");
+
+// Fix ISO-8859-1 encoding in feeds resulting in \uFFFD
+// https://github.com/axios/axios/issues/332#issuecomment-222744486
+axios.interceptors.response.use(response => {
+    let ctype = response.headers["content-type"];
+    if (ctype.includes("charset=ISO-8859-1")) {
+        response.data = iconv.decode(response.data, 'ISO-8859-1');
+    }
+    return response;
+})
 
 export class FeedError extends Error {
     constructor(
