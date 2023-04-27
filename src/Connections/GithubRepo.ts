@@ -2,13 +2,13 @@
 import { Appservice, Intent, IRichReplyMetadata, StateEvent } from "matrix-bot-sdk";
 import { BotCommands, botCommand, compileBotCommands, HelpFunction } from "../BotCommands";
 import { CommentProcessor } from "../CommentProcessor";
-import { FormatUtil } from "../FormatUtil";
+import { FormatUtil, LooseMinimalGitHubRepo } from "../FormatUtil";
 import { Octokit } from "@octokit/rest";
 import { Connection, IConnection, IConnectionState, InstantiateConnectionOpts, ProvisionConnectionOpts } from "./IConnection";
 import { GetConnectionsResponseItem } from "../provisioning/api";
 import { IssuesOpenedEvent, IssuesReopenedEvent, IssuesEditedEvent, PullRequestOpenedEvent, IssuesClosedEvent, PullRequestClosedEvent,
     PullRequestReadyForReviewEvent, PullRequestReviewSubmittedEvent, ReleasePublishedEvent, ReleaseCreatedEvent,
-    IssuesLabeledEvent, IssuesUnlabeledEvent, WorkflowRunCompletedEvent,
+    IssuesLabeledEvent, IssuesUnlabeledEvent, WorkflowRunCompletedEvent, IssueCommentCreatedEvent, PushEvent
 } from "@octokit/webhooks-types";
 import { MatrixMessageContent, MatrixEvent, MatrixReactionContent } from "../MatrixEvent";
 import { MessageSenderClient } from "../MatrixSender";
@@ -25,7 +25,7 @@ import { GitHubIssueConnection } from "./GithubIssue";
 import { BridgeConfigGitHub } from "../Config/Config";
 import { ApiError, ErrCode, ValidatorApiError } from "../api";
 import { PermissionCheckFn } from ".";
-import { MinimalGitHubIssue, MinimalGitHubRepo } from "../libRs";
+import { GitHubRepoMessageBody, MinimalGitHubIssue } from "../libRs";
 import Ajv, { JSONSchemaType } from "ajv";
 import { HookFilter } from "../HookFilter";
 import { GitHubGrantChecker } from "../Github/GrantChecker";
@@ -100,6 +100,8 @@ export type AllowedEventsNames =
     "issue.created" |
     "issue.edited" |
     "issue.labeled" |
+    "issue.comment" |
+    "issue.comment.created" |
     "issue" |
     "pull_request.closed" |
     "pull_request.merged" |
@@ -107,6 +109,7 @@ export type AllowedEventsNames =
     "pull_request.ready_for_review" |
     "pull_request.reviewed" |
     "pull_request" |
+    "push" |
     "release.created" |
     "release.drafted" |
     "release" |
@@ -125,13 +128,16 @@ export const AllowedEvents: AllowedEventsNames[] = [
     "issue.created" ,
     "issue.edited" ,
     "issue.labeled" ,
-    "issue" ,
+    "issue.comment",
+    "issue.comment.created",
+    "issue",
     "pull_request.closed" ,
     "pull_request.merged" ,
     "pull_request.opened" ,
     "pull_request.ready_for_review" ,
     "pull_request.reviewed" ,
     "pull_request" ,
+    "push",
     "release.created" ,
     "release.drafted" ,
     "release",
@@ -319,10 +325,26 @@ const WORKFLOW_CONCLUSION_TO_NOTICE: Record<WorkflowRunCompletedEvent["workflow_
     stale: "completed, but is stale 🍞"
 }
 
+const TRUNCATE_COMMENT_SIZE = 256;
 const LABELED_DEBOUNCE_MS = 5000;
 const CREATED_GRACE_PERIOD_MS = 6000;
 const DEFAULT_HOTLINK_PREFIX = "#";
 const MAX_RETURNED_TARGETS = 10;
+
+interface IPushEventContent {
+    body: string,
+    formatted_body: string,
+    msgtype: "m.notice",
+    format: "org.matrix.custom.html",
+    external_url: string,
+    "uk.half-shot.matrix-hookshot.github.push": {
+        commits: string[],
+        ref: string,
+        base_ref: string|null,
+        pusher: string,
+    },
+    "uk.half-shot.matrix-hookshot.github.repo": GitHubRepoMessageBody["uk.half-shot.matrix-hookshot.github.repo"],
+}
 
 function compareEmojiStrings(e0: string, e1: string, e0Index = 0) {
     return e0.codePointAt(e0Index) === e1.codePointAt(0);
@@ -341,8 +363,9 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
 	static validateState(state: unknown, isExistingState = false): ConnectionValidatedState {
         const validator = new Ajv({ allowUnionTypes: true }).compile(ConnectionStateSchema);
         if (validator(state)) {
-            if (!isExistingState && state.enableHooks && !state.enableHooks.every(h => AllowedEvents.includes(h))) {
-                throw new ApiError('`enableHooks` must only contain allowed values', ErrCode.BadValue);
+            const invalidHooks = !isExistingState && state.enableHooks && state.enableHooks.filter(h => !AllowedEvents.includes(h));
+            if (invalidHooks && invalidHooks.length) {
+                throw new ApiError(`'enableHooks' must only contain allowed values. Found invalid values ${invalidHooks}`, ErrCode.BadValue);
             }
             if (state.ignoreHooks) {
                 if (!isExistingState) {
@@ -360,7 +383,7 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
         throw new ValidatorApiError(validator.errors);
     }
 
-    static async assertUserHasAccessToRepo(userId: string, org: string, repo: string, github: GithubInstance, tokenStore: UserTokenStore) {
+    static async assertUserHasAccessToRepo(userId: string, org: string, repo: string, tokenStore: UserTokenStore) {
         const octokit = await tokenStore.getOctokitForUser(userId);
         if (!octokit) {
             throw new ApiError("User is not authenticated with GitHub", ErrCode.ForbiddenUser);
@@ -384,9 +407,25 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
             throw Error('GitHub is not configured');
         }
         const validData = this.validateState(data);
-        await this.assertUserHasAccessToRepo(userId, validData.org, validData.repo, github, tokenStore);
-        const appOctokit = await github.getSafeOctokitForRepo(validData.org, validData.repo);
-        if (!appOctokit) {
+        await this.assertUserHasAccessToRepo(userId, validData.org, validData.repo, tokenStore);
+        const userOctokit = await tokenStore.getOctokitForUser(userId);
+        if (!userOctokit) {
+            // Given we assert the above, this is unlikely.
+            throw new ApiError("User is not authenticated with GitHub", ErrCode.ForbiddenUser);
+        }
+        const ownSelf = await userOctokit.users.getAuthenticated();
+        
+        let installationId = 0;
+
+        if (ownSelf.data.login === validData.org) {
+            installationId = (await github.appOctokit.apps.getUserInstallation({ username: ownSelf.data.login })).data.id;
+        } else {
+            // Github will error if the authed user tries to list repos of a disallowed installation, even
+            // if we got the installation ID from the app's instance.
+            installationId = (await github.appOctokit.apps.getOrgInstallation({ org: validData.org })).data.id;
+        }
+
+        if (!installationId) {
             throw new ApiError(
                 "You need to add a GitHub App to this organisation / repository before you can bridge it. Open the link to add the app, and then retry this request",
                 ErrCode.AdditionalActionRequired,
@@ -398,7 +437,7 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
             );
         }
         const stateEventKey = `${validData.org}/${validData.repo}`;
-        await new GitHubGrantChecker(as, github, tokenStore).grantConnection(roomId, { org: validData.org, repo: validData.repo });
+        await new GitHubGrantChecker(as, tokenStore).grantConnection(roomId, { org: validData.org, repo: validData.repo });
         await intent.underlyingClient.sendStateEvent(roomId, this.CanonicalEventType, stateEventKey, validData);
         return {
             stateEventContent: validData,
@@ -510,7 +549,7 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
 
     public debounceOnIssueLabeled = new Map<number, {labels: Set<string>, timeout: NodeJS.Timeout}>();
 
-    private readonly grantChecker = new GitHubGrantChecker(this.as, this.githubInstance, this.tokenStore);
+    private readonly grantChecker = new GitHubGrantChecker(this.as, this.tokenStore);
 
     constructor(
         roomId: string,
@@ -614,7 +653,7 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
         const issueNumber = result?.[1];
 
         if (issueNumber) {
-            let issue: MinimalGitHubIssue & { repository?: MinimalGitHubRepo, pull_request?: unknown, state: string };
+            let issue: MinimalGitHubIssue & { repository?: LooseMinimalGitHubRepo, pull_request?: unknown, state: string };
             try {
                 issue = (await octokit.issues.get({
                     repo: this.state.repo,
@@ -864,6 +903,24 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
             formatted_body: md.renderInline(content) + (labels.html.length > 0 ? ` with labels ${labels.html}`: ""),
             format: "org.matrix.custom.html",
             ...FormatUtil.getPartialBodyForGithubIssue(event.repository, event.issue),
+        });
+    }
+
+    public async onIssueCommentCreated(event: IssueCommentCreatedEvent) {
+        if (this.hookFilter.shouldSkip('issue.comment.created', 'issue.comment', 'issue') || !this.matchesLabelFilter(event.issue)) {
+            return;
+        }
+    
+        let message = `**${event.comment.user.login}** [commented](${event.issue.html_url}) on [${event.repository.full_name}#${event.issue.number}](${event.issue.html_url})  `;
+        message += "\n > " + event.comment.body.substring(0, TRUNCATE_COMMENT_SIZE) + (event.comment.body.length > TRUNCATE_COMMENT_SIZE ? "…" : "");
+
+        await this.intent.sendEvent(this.roomId, {
+            msgtype: "m.notice",
+            body: message,
+            formatted_body: md.renderInline(message),
+            format: "org.matrix.custom.html",
+            ...FormatUtil.getPartialBodyForGithubIssue(event.repository, event.issue),
+            external_url: event.issue.html_url,
         });
     }
 
@@ -1257,6 +1314,29 @@ export class GitHubRepoConnection extends CommandConnection<GitHubRepoConnection
                 });
             }
         }
+    }
+
+    public async onPush(event: PushEvent) {
+        if (this.hookFilter.shouldSkip('push')) {
+            return;
+        }
+    
+        const content = `**${event.sender.login}** pushed [${event.commits.length} commit${event.commits.length === 1 ? '' : 's'}](${event.compare}) to \`${event.ref}\` for ${event.repository.full_name}`;
+        const eventContent: IPushEventContent = {
+            ...FormatUtil.getPartialBodyForGithubRepo(event.repository),
+            external_url: event.compare,
+            "uk.half-shot.matrix-hookshot.github.push": {
+                commits: event.commits.map(c => c.id),
+                pusher: `${event.pusher.name} <${event.pusher.email}>`,
+                ref: event.ref,
+                base_ref: event.base_ref,
+            },
+            msgtype: "m.notice",
+            body: content,
+            formatted_body: md.render(content),
+            format: "org.matrix.custom.html",
+        };
+        await this.intent.sendEvent(this.roomId, eventContent);
     }
 
     public toString() {

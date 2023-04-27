@@ -1,4 +1,4 @@
-import { MatrixClient, MatrixError } from "matrix-bot-sdk";
+import { MatrixError } from "matrix-bot-sdk";
 import { BridgeConfigFeeds } from "../Config/Config";
 import { ConnectionManager } from "../ConnectionManager";
 import { FeedConnection } from "../Connections";
@@ -8,12 +8,12 @@ import { MessageQueue } from "../MessageQueue";
 import Ajv from "ajv";
 import axios, { AxiosResponse } from "axios";
 import iconv from "iconv-lite";
-import Parser from "rss-parser";
 import Metrics from "../Metrics";
 import UserAgent from "../UserAgent";
 import { randomUUID } from "crypto";
 import { StatusCodes } from "http-status-codes";
 import { FormatUtil } from "../FormatUtil";
+import { JsRssChannel, parseFeed } from "../libRs";
 
 const log = new Logger("FeedReader");
 
@@ -63,6 +63,9 @@ export interface FeedEntry {
     title: string|null,
     link:  string|null,
     content: string|null,
+    pubdate: string|null,
+    summary: string|null,
+    author: string|null,
     /**
      * Unique key to identify the specific fetch across entries.
      */
@@ -77,6 +80,11 @@ interface AccountData {
     [url: string]: string[],
 }
 
+interface AccountDataStore {
+    getAccountData<T>(type: string): Promise<T>;
+    setAccountData<T>(type: string, data: T): Promise<void>;
+}
+
 const accountDataSchema = {
     type: 'object',
     patternProperties: {
@@ -89,6 +97,10 @@ const accountDataSchema = {
 };
 const ajv = new Ajv();
 const validateAccountData = ajv.compile<AccountData>(accountDataSchema);
+
+function isNonEmptyString(input: unknown): input is string {
+    return Boolean(input) && typeof input === 'string';
+}
 
 function stripHtml(input: string): string {
     return input.replace(/<[^>]*?>/g, '');
@@ -108,14 +120,37 @@ function shuffle<T>(array: T[]): T[] {
     return array;
 }
 
-interface FeedItem {
-    title?: string;
-    link?: string;
-    id?: string;
-}
 
 export class FeedReader {
-    private readonly parser = FeedReader.buildParser();
+    /**
+     * Read a feed URL and parse it into a set of items.
+     * @param url The feed URL.
+     * @param headers Any headers to provide.
+     * @param timeoutMs How long to wait for the response, in milliseconds.
+     * @param parser The parser instance. If not provided, this creates a new parser.
+     * @returns The raw axios response, and the parsed feed.
+     */
+    public static async fetchFeed(
+        url: string,
+        headers: Record<string, string>,
+        timeoutMs: number,
+        httpClient = axios,
+    ): Promise<{ response: AxiosResponse, feed: JsRssChannel }> {
+        const response = await httpClient.get(url, {
+            headers: {
+                'User-Agent': UserAgent,
+                ...headers,
+            },
+            // We don't want to wait forever for the feed.
+            timeout: timeoutMs,
+        });
+        
+        if (typeof response.data !== "string") {
+            throw Error('Unexpected response type');
+        }
+        const feed = parseFeed(response.data);
+        return { response, feed };
+    }
 
     private connections: FeedConnection[];
     // ts should notice that we do in fact initialize it in constructor, but it doesn't (in this version)
@@ -126,7 +161,7 @@ export class FeedReader {
     private seenEntries: Map<string, string[]> = new Map();
     // A set of last modified times for each url.
     private cacheTimes: Map<string, { etag?: string, lastModified?: string}> = new Map();
-    
+
     // Reason failures to url map.
     private feedsFailingHttp = new Set();
     private feedsFailingParsing = new Set();
@@ -144,7 +179,8 @@ export class FeedReader {
         private readonly config: BridgeConfigFeeds,
         private readonly connectionManager: ConnectionManager,
         private readonly queue: MessageQueue,
-        private readonly matrixClient: MatrixClient,
+        private readonly accountDataStore: AccountDataStore,
+        private readonly httpClient = axios,
     ) {
         this.connections = this.connectionManager.getAllConnectionsOfType(FeedConnection);
         this.calculateFeedUrls();
@@ -188,11 +224,12 @@ export class FeedReader {
         this.feedQueue = shuffle([...this.observedFeedUrls.values()]);
 
         Metrics.feedsCount.set(this.observedFeedUrls.size);
+        Metrics.feedsCountDeprecated.set(this.observedFeedUrls.size);
     }
 
     private async loadSeenEntries(): Promise<void> {
         try {
-            const accountData = await this.matrixClient.getAccountData<AccountData>(FeedReader.seenEntriesEventType).catch((err: MatrixError|unknown) => {
+            const accountData = await this.accountDataStore.getAccountData<AccountData>(FeedReader.seenEntriesEventType).catch((err: MatrixError|unknown) => {
                 if (err instanceof MatrixError && err.statusCode === 404) {
                     return {} as AccountData;
                 } else {
@@ -217,40 +254,18 @@ export class FeedReader {
         for (const [url, guids] of this.seenEntries.entries()) {
             accountData[url.toString()] = guids;
         }
-        await this.matrixClient.setAccountData(FeedReader.seenEntriesEventType, accountData);
-    }
-
-    private static buildParser(): Parser {
-        return new Parser();
-    }
-
-    public static async fetchFeed(
-        url: string,
-        headers: Record<string, string>,
-        timeoutMs: number,
-        parser: Parser = FeedReader.buildParser(),
-    ): Promise<{ response: AxiosResponse, feed: Parser.Output<FeedItem> }> {
-        const response = await axios.get(url, {
-            headers: {
-                'User-Agent': UserAgent,
-                ...headers,
-            },
-            // We don't want to wait forever for the feed.
-            timeout: timeoutMs,
-        });
-        const feed = await parser.parseString(response.data);
-        return { response, feed };
+        await this.accountDataStore.setAccountData(FeedReader.seenEntriesEventType, accountData);
     }
 
     /**
      * Poll a given feed URL for data, pushing any entries found into the message queue.
      * We also check the `cacheTimes` cache to see if the feed has recent entries that we can
      * filter out.
-     * 
+     *
      * @param url The URL to be polled.
      * @returns A boolean that returns if we saw any changes on the feed since the last poll time.
      */
-    private async pollFeed(url: string): Promise<boolean> {
+    public async pollFeed(url: string): Promise<boolean> {
         let seenEntriesChanged = false;
         const fetchKey = randomUUID();
         const { etag, lastModified } = this.cacheTimes.get(url) || {};
@@ -264,9 +279,9 @@ export class FeedReader {
                 },
                 // We don't want to wait forever for the feed.
                 this.config.pollTimeoutSeconds * 1000,
-                this.parser,
+                this.httpClient,
             );
-            
+
             // Store any entity tags/cache times.
             if (response.headers.ETag) {
                 this.cacheTimes.set(url, { etag: response.headers.ETag});
@@ -284,7 +299,6 @@ export class FeedReader {
 
             // migrate legacy, cleartext guids to their md5-hashed counterparts
             seenGuids = seenGuids.map(guid => guid.startsWith('md5:') ? guid : this.hashGuid(guid));
-
             const seenGuidsSet = new Set(seenGuids);
             const newGuids = [];
             log.debug(`Found ${feed.items.length} entries in ${url}`);
@@ -292,31 +306,32 @@ export class FeedReader {
             for (const item of feed.items) {
                 // Find the first guid-like that looks like a string.
                 // Some feeds have a nasty habit of leading a empty tag there, making us parse it as garbage.
-                const guid = [item.guid, item.id, item.link, item.title].find(id => typeof id === 'string' && id);
-                if (!guid) {
+                if (!item.hashId) {
                     log.error(`Could not determine guid for entry in ${url}, skipping`);
                     continue;
                 }
-                const hashedGuid = this.hashGuid(guid);
-                newGuids.push(hashedGuid);
+                const hashId = `md5:${item.hashId}`;
+                newGuids.push(hashId);
 
                 if (initialSync) {
-                    log.debug(`Skipping entry ${guid} since we're performing an initial sync`);
+                    log.debug(`Skipping entry ${item.id ?? hashId} since we're performing an initial sync`);
                     continue;
                 }
-                if (seenGuidsSet.has(hashedGuid)) {
-                    log.debug('Skipping already seen entry', guid);
+                if (seenGuidsSet.has(hashId)) {
+                    log.debug('Skipping already seen entry', item.id ?? hashId);
                     continue;
                 }
-
                 const entry = {
                     feed: {
-                        title: feed.title ? stripHtml(feed.title) : null,
+                        title: isNonEmptyString(feed.title) ? stripHtml(feed.title) : null,
                         url: url,
                     },
-                    title: item.title ? stripHtml(item.title) : null,
-                    content: item.content ? item.content : null,
-                    link: item.link || null,
+                    title: isNonEmptyString(item.title) ? stripHtml(item.title) : null,
+                    content: item.content ?? null,
+                    pubdate: item.pubdate ?? null,
+                    summary: item.summary ?? null,
+                    author: item.author ?? null,
+                    link: item.link ?? null,
                     fetchKey
                 };
 
@@ -330,7 +345,7 @@ export class FeedReader {
                 // Some RSS feeds can return a very small number of items then bounce
                 // back to their "normal" size, so we cannot just clobber the recent GUID list per request or else we'll
                 // forget what we sent and resend it. Instead, we'll keep 2x the max number of items that we've ever
-                // seen from this feed, up to a max of 10,000. 
+                // seen from this feed, up to a max of 10,000.
                 // Adopted from https://github.com/matrix-org/go-neb/blob/babb74fa729882d7265ff507b09080e732d060ae/services/rssbot/rssbot.go#L304
                 const maxGuids = Math.min(Math.max(2 * newGuids.length, seenGuids.length), 10_000);
                 const newSeenItems = Array.from(new Set([ ...newGuids, ...seenGuids ]).values()).slice(0, maxGuids);
@@ -360,7 +375,10 @@ export class FeedReader {
         return seenEntriesChanged;
     }
 
-    private async pollFeeds(): Promise<void> {
+    /**
+     * Start polling all the feeds. 
+     */
+    public async pollFeeds(): Promise<void> {
         log.debug(`Checking for updates in ${this.observedFeedUrls.size} RSS/Atom feeds`);
 
         const fetchingStarted = Date.now();
@@ -375,9 +393,12 @@ export class FeedReader {
 
         Metrics.feedsFailing.set({ reason: "http" }, this.feedsFailingHttp.size );
         Metrics.feedsFailing.set({ reason: "parsing" }, this.feedsFailingParsing.size);
+        Metrics.feedsFailingDeprecated.set({ reason: "http" }, this.feedsFailingHttp.size );
+        Metrics.feedsFailingDeprecated.set({ reason: "parsing" }, this.feedsFailingParsing.size);
 
         const elapsed = Date.now() - fetchingStarted;
         Metrics.feedFetchMs.set(elapsed);
+        Metrics.feedsFetchMsDeprecated.set(elapsed);
 
         const sleepFor = Math.max(this.sleepingInterval - elapsed, 0);
         log.debug(`Feed fetching took ${elapsed / 1000}s, sleeping for ${sleepFor / 1000}s`);

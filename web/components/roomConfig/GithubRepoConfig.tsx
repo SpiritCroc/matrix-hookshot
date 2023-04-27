@@ -18,7 +18,7 @@ function getRepoFullName(state: GitHubRepoConnectionState) {
 }
 
 const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<never, GitHubRepoResponseItem, GitHubRepoConnectionState>> = ({
-    showAuthPrompt, loginLabel, serviceConfig, api, existingConnection, onSave, onRemove
+    showAuthPrompt, loginLabel, serviceConfig, api, existingConnection, onSave, onRemove, isUpdating
 }) => {
     // Assume true if we have no auth prompt.
     const [authedResponse, setAuthResponse] = useState<GetAuthResponse|null>(null);
@@ -128,6 +128,10 @@ const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<ne
                     <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="issue" hookEventName="issue.edited" onChange={toggleEnabledHook}>Edited</EventHookCheckbox>
                     <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="issue" hookEventName="issue.labeled" onChange={toggleEnabledHook}>Labeled</EventHookCheckbox>
                 </ul>
+                <EventHookCheckbox enabledHooks={enabledHooks} hookEventName="issue.comment" onChange={toggleEnabledHook}>Issue Comments</EventHookCheckbox>
+                <ul>
+                    <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="issue.comment" hookEventName="issue.comment.created" onChange={toggleEnabledHook}>Created</EventHookCheckbox>
+                </ul>
                 <EventHookCheckbox enabledHooks={enabledHooks} hookEventName="pull_request" onChange={toggleEnabledHook}>Pull requests</EventHookCheckbox>
                 <ul>
                     <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="pull_request" hookEventName="pull_request.opened" onChange={toggleEnabledHook}>Opened</EventHookCheckbox>
@@ -136,6 +140,7 @@ const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<ne
                     <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="pull_request" hookEventName="pull_request.ready_for_review" onChange={toggleEnabledHook}>Ready for review</EventHookCheckbox>
                     <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="pull_request" hookEventName="pull_request.reviewed" onChange={toggleEnabledHook}>Reviewed</EventHookCheckbox>
                 </ul>
+                <EventHookCheckbox enabledHooks={enabledHooks} hookEventName="push" onChange={toggleEnabledHook}>Pushed commits</EventHookCheckbox>
                 <EventHookCheckbox enabledHooks={enabledHooks} hookEventName="workflow.run" onChange={toggleEnabledHook}>Workflow Runs</EventHookCheckbox>
                 <ul>
                     <EventHookCheckbox enabledHooks={enabledHooks} parentEvent="workflow.run" hookEventName="workflow.run.success" onChange={toggleEnabledHook}>Success</EventHookCheckbox>
@@ -154,8 +159,8 @@ const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<ne
             </ul>
         </InputField>
         <ButtonSet>
-            { canEdit && consideredAuthenticated && <Button type="submit" disabled={!existingConnection && !connectionState}>{ existingConnection?.id ? "Save" : "Add repository" }</Button>}
-            { canEdit && existingConnection?.id && <Button intent="remove" onClick={onRemove}>Remove repository</Button>}
+            { canEdit && consideredAuthenticated && <Button type="submit" disabled={isUpdating || !existingConnection && !connectionState}>{ existingConnection?.id ? "Save" : "Add repository" }</Button>}
+            { canEdit && existingConnection?.id && <Button disabled={isUpdating} intent="remove" onClick={onRemove}>Remove repository</Button>}
         </ButtonSet>
     </form>;
 };

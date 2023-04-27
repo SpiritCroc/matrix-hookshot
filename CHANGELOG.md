@@ -1,3 +1,57 @@
+4.0.0 (2023-04-27)
+==================
+
+Features
+--------
+
+- Add support for specifying custom templates for feeds. ([\#702](https://github.com/matrix-org/matrix-hookshot/issues/702))
+- Use SQLite for file-based crypto stores by default, instead of Sled. ([\#714](https://github.com/matrix-org/matrix-hookshot/issues/714))
+- Notifications for RSS feed failures can now be toggled on and off. The feature is now **off** by default. ([\#716](https://github.com/matrix-org/matrix-hookshot/issues/716))
+
+
+Bugfixes
+--------
+
+- Fix mishandling of empty feed/item title tags. ([\#708](https://github.com/matrix-org/matrix-hookshot/issues/708))
+- Add information about GitHub App Installs in 'update' state on the oauth status page. ([\#717](https://github.com/matrix-org/matrix-hookshot/issues/717))
+- Fix cases of GitHub repos not being bridgable if the GitHub App had to be manually approved. ([\#718](https://github.com/matrix-org/matrix-hookshot/issues/718))
+- Switch to using Rust for parsing RSS feeds. ([\#721](https://github.com/matrix-org/matrix-hookshot/issues/721))
+
+
+Deprecations and Removals
+-------------------------
+
+- Add support for Node 20, and drop support for Node 16. ([\#724](https://github.com/matrix-org/matrix-hookshot/issues/724))
+
+
+Internal Changes
+----------------
+
+- Ensure all Hookshot specific metrics have a `hookshot_` prefix. ([\#701](https://github.com/matrix-org/matrix-hookshot/issues/701))
+- Update dependency used in Generic Webhook JS functions to fix a security flaw. ([\#705](https://github.com/matrix-org/matrix-hookshot/issues/705))
+- Switch to using Rust for parsing RSS feeds. ([\#709](https://github.com/matrix-org/matrix-hookshot/issues/709))
+- Update the README with a prettier set of features. ([\#726](https://github.com/matrix-org/matrix-hookshot/issues/726))
+- Update `yaml` dependency to `2.2.2` ([\#728](https://github.com/matrix-org/matrix-hookshot/issues/728))
+
+
+3.2.0 (2023-04-04)
+==================
+
+Features
+--------
+
+- Allow users to import other people's go-neb services. ([\#695](https://github.com/matrix-org/matrix-hookshot/issues/695))
+- Add support for push events on Github repo connections. ([\#696](https://github.com/matrix-org/matrix-hookshot/issues/696))
+- Add support for issue created notifications in Github Repo connections. ([\#697](https://github.com/matrix-org/matrix-hookshot/issues/697))
+- Support using the `guid` field of an RSS feed entry as a link ([\#700](https://github.com/matrix-org/matrix-hookshot/issues/700))
+
+
+Internal Changes
+----------------
+
+- Only run changelog checks when only the changelog changes in CI. ([\#692](https://github.com/matrix-org/matrix-hookshot/issues/692))
+
+
 3.1.1 (2023-03-28)
 ==================
 

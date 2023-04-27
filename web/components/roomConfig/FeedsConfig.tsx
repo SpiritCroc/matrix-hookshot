@@ -8,6 +8,8 @@ import styles from "./FeedConnection.module.scss";
 
 import FeedsIcon from "../../icons/feeds.png";
 
+const DEFAULT_TEMPLATE = "New post in $FEEDNAME: $LINK"
+
 const FeedRecentResults: FunctionComponent<{item: FeedResponseItem}> = ({ item }) => {
     if (!item.secrets) {
         return null;
@@ -24,15 +26,18 @@ const FeedRecentResults: FunctionComponent<{item: FeedResponseItem}> = ({ item }
         </ul>
     </>;
 }
+const DOCUMENTATION_LINK = "https://matrix-org.github.io/matrix-hookshot/latest/setup/feeds.html#feed-templates";
 
-const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<ServiceConfig, FeedResponseItem, FeedConnectionState>> = ({existingConnection, onSave, onRemove}) => {
+const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<ServiceConfig, FeedResponseItem, FeedConnectionState>> = ({existingConnection, onSave, onRemove, isMigrationCandidate, isUpdating}) => {
     const urlRef = createRef<HTMLInputElement>();
     const labelRef = createRef<HTMLInputElement>();
-
-    const canEdit = !existingConnection?.id || (existingConnection?.canEdit ?? false);
+    const templateRef = createRef<HTMLInputElement>();
+    const notifyRef = createRef<HTMLInputElement>();
+    const canSave = !existingConnection?.id || (existingConnection?.canEdit ?? false);
+    const canEdit = canSave && !isMigrationCandidate;
     const handleSave = useCallback((evt: Event) => {
         evt.preventDefault();
-        if (!canEdit) {
+        if (!canSave) {
             return;
         }
         const url = urlRef?.current?.value || existingConnection?.config.url;
@@ -40,23 +45,33 @@ const ConnectionConfiguration: FunctionComponent<ConnectionConfigurationProps<Se
             onSave({
                 url,
                 label: labelRef?.current?.value || existingConnection?.config.label,
-            });
+                template: templateRef.current?.value || existingConnection?.config.template,
+                notifyOnFailure: notifyRef.current?.checked || existingConnection?.config.notifyOnFailure,
+            })
         }
-    }, [canEdit, onSave, urlRef, labelRef, existingConnection]);
+    }, [canSave, onSave, urlRef, labelRef, templateRef, notifyRef, existingConnection]);
+
+    const onlyVisibleOnExistingConnection = !!existingConnection;
 
     return <form onSubmit={handleSave}>
         { existingConnection && <FeedRecentResults item={existingConnection} />}
 
-        <InputField visible={!existingConnection?.id} label="URL" noPadding={true}>
-            <input ref={urlRef} disabled={!canEdit || (existingConnection && !existingConnection.id)} type="text" value={existingConnection?.config.url} />
+        <InputField visible={true} label="URL" noPadding={true}>
+            <input ref={urlRef} disabled={!canEdit || !!existingConnection} type="text" value={existingConnection?.config.url} />
         </InputField>
-        <InputField visible={!existingConnection?.id} label="Label" noPadding={true}>
-            <input ref={labelRef} disabled={!canEdit} type="text" value={existingConnection?.config.label} />
+        <InputField visible={true} label="Label" noPadding={true}>
+            <input ref={labelRef} disabled={!canSave} type="text" value={existingConnection?.config.label} />
         </InputField>
-
+        <InputField visible={onlyVisibleOnExistingConnection} label="Send a notice on read failure" noPadding={true}>
+            <input ref={notifyRef} disabled={!canSave} type="checkbox" checked={existingConnection?.config.notifyOnFailure} />
+        </InputField>
+        <InputField visible={onlyVisibleOnExistingConnection} label="Template" noPadding={true}>
+            <input ref={templateRef} disabled={!canSave} type="text" value={existingConnection?.config.template} placeholder={DEFAULT_TEMPLATE} />
+            <p> See the <a target="_blank" rel="noopener noreferrer" href={DOCUMENTATION_LINK}>documentation</a> for help writing templates. </p>
+        </InputField>
         <ButtonSet>
-            { canEdit && <Button type="submit">{ existingConnection?.id ? "Save" : "Subscribe" }</Button>}
-            { canEdit && existingConnection?.id && <Button intent="remove" onClick={onRemove}>Unsubscribe</Button>}
+            { canSave && <Button type="submit" disabled={isUpdating}>{ existingConnection?.id ? "Save" : "Subscribe" }</Button>}
+            { canEdit && existingConnection?.id && <Button intent="remove" onClick={onRemove} disabled={isUpdating}>Unsubscribe</Button>}
         </ButtonSet>
 
     </form>;
@@ -89,7 +104,7 @@ export const FeedsConfig: BridgeConfig = ({ api, roomId, showHeader }) => {
         });
     }, [api, roomId]);
 
-    const compareConnections = useCallback((goNebConnection, nativeConnection) => goNebConnection.config.url === nativeConnection.config.url, []);
+    const compareConnections = useCallback((goNebConnection: FeedResponseItem, nativeConnection: FeedResponseItem) => goNebConnection.config.url === nativeConnection.config.url, []);
 
     return <RoomConfig<ServiceConfig, FeedResponseItem, FeedConnectionState>
         headerImg={FeedsIcon}

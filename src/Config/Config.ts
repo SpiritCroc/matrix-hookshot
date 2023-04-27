@@ -409,6 +409,7 @@ interface BridgeConfigBot {
 }
 interface BridgeConfigEncryption {
     storagePath: string;
+    useLegacySledStore: boolean;
 }
 
 export interface BridgeConfigServiceBot {
@@ -434,6 +435,7 @@ export interface BridgeConfigMetrics {
 export interface BridgeConfigGoNebMigrator {
     apiUrl: string;
     serviceIds?: string[];
+    goNebBotPrefix?: string;
 }
 
 export interface BridgeConfigRoot {
