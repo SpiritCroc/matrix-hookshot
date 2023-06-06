@@ -53,7 +53,7 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
         {
             localpart: "feeds",
             displayname: "Feeds",
-            avatar: "mxc://half-shot.uk/2876e89ccade4cb615e210c458e2a7a6883fe17d",
+            avatar: "./assets/feeds_avatar.png",
             prefix: "!feeds",
             service: "feeds",
         },
@@ -145,7 +145,11 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
             bindAddress: '0.0.0.0',
             resources: ['widgets'],
         }
-    ]
+    ],
+    sentry: {
+        dsn: "https://examplePublicKey@o0.ingest.sentry.io/0",
+        environment: "production"
+    }
 };
 
 export const DefaultConfig = new BridgeConfig(DefaultConfigRoot);
