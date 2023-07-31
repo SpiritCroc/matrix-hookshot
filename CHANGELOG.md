@@ -1,3 +1,49 @@
+4.4.1 (2023-07-31)
+==================
+
+It is **strongly** reccomended you upgrade your bridge, as this release contains security fixes.
+
+🔒 Security
+-----------
+
+- Fixes for GHSA-vc7j-h8xg-fv5x.
+
+
+Features
+--------
+
+- Add more icons to GitHub repo hooks ([\#795](https://github.com/matrix-org/matrix-hookshot/issues/795))
+
+
+Bugfixes
+--------
+
+- Fix instructions for validating your config using Docker ([\#787](https://github.com/matrix-org/matrix-hookshot/issues/787))
+
+
+Internal Changes
+----------------
+
+- Sort feed list alphabetically in bot command response ([\#791](https://github.com/matrix-org/matrix-hookshot/issues/791))
+- Update word-wrap from 1.2.3 to 1.2.4. ([\#799](https://github.com/matrix-org/matrix-hookshot/issues/799))
+- Update matrix-appservice-bridge to 9.0.1. ([\#800](https://github.com/matrix-org/matrix-hookshot/issues/800))
+
+
+4.4.0 (2023-06-28)
+==================
+
+Bugfixes
+--------
+
+- Refactor Hookshot to use Redis for caching of feed information, massively improving memory usage.
+
+  Please note that this is a behavioural change: Hookshots configured to use in-memory caching (not Redis),
+  will no longer bridge any RSS entries it may have missed during downtime, and will instead perform an initial
+  sync (not reporting any entries) instead. ([\#786](https://github.com/matrix-org/matrix-hookshot/issues/786))
+
+- Feeds now tries to find an HTML-type link before falling back to the first link when parsing atom feeds ([\#784](https://github.com/matrix-org/matrix-hookshot/issues/784))
+
+
 4.3.0 (2023-06-19)
 ==================
 

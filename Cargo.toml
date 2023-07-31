@@ -1,13 +1,13 @@
 [package]
 name = "matrix-hookshot"
-version = "1.8.1"
+version = "4.4.0"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = {version="2", features=["serde-json"]}
+napi = {version="2", features=["serde-json", "async"]}
 napi-derive = "2"
 url = "2"
 serde_json = "1"
@@ -20,6 +20,7 @@ hex = "0.4.3"
 rss = "2.0.3"
 atom_syndication = "0.12"
 ruma = { version = "0.8.2", features = ["events", "unstable-sanitize"] }
+reqwest = "0.11"
 
 [build-dependencies]
 napi-build = "1"
