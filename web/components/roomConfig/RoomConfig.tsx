@@ -1,13 +1,14 @@
 import { FunctionComponent } from "preact";
 import { useCallback, useEffect, useReducer, useState } from "preact/hooks"
 import { BridgeAPI, BridgeAPIError } from "../../BridgeAPI";
-import { ErrorPane, ListItem, WarningPane, Card } from "../elements";
+import { ListItem, Card } from "../elements";
 import style from "./RoomConfig.module.scss";
 import { GetConnectionsResponseItem } from "../../../src/provisioning/api";
 import { IConnectionState } from "../../../src/Connections";
 import { LoadingSpinner } from '../elements/LoadingSpinner';
 import { ErrCode } from "../../../src/api";
 import { retry } from "../../../src/PromiseUtil";
+import { Alert } from "@vector-im/compound-web";
 export interface ConnectionConfigurationProps<SConfig, ConnectionType extends GetConnectionsResponseItem, ConnectionState extends IConnectionState> {
     serviceConfig: SConfig;
     loginLabel?: string;
@@ -34,6 +35,7 @@ interface IRoomConfigProps<SConfig, ConnectionType extends GetConnectionsRespons
     type: string;
     showAuthPrompt?: boolean;
     showHeader: boolean;
+    darkHeaderImg?: boolean;
     headerImg: string;
     text: IRoomConfigText;
     connectionEventType: string;
@@ -51,6 +53,7 @@ export const RoomConfig = function<SConfig, ConnectionType extends GetConnection
         roomId,
         type,
         showAuthPrompt = false,
+        darkHeaderImg,
         headerImg,
         showHeader,
         text,
@@ -95,6 +98,8 @@ export const RoomConfig = function<SConfig, ConnectionType extends GetConnection
     }, [api, roomId, type, newConnectionKey]);
 
     const [ toMigrate, setToMigrate ] = useState<ConnectionType[]>([]);
+
+    const canSendMessages = connections?.every(c => c.canSendMessages) ?? true;
 
     useEffect(() => {
         // produce `toMigrate` composed of `migrationCandidates` with anything already in `connections` filtered out
@@ -151,18 +156,21 @@ export const RoomConfig = function<SConfig, ConnectionType extends GetConnection
 
     return <Card>
         <main>
-            {
-                error &&
-                (!error.isWarning
-                        ? <ErrorPane header={error.header || "Error"}>{error.message}</ErrorPane>
-                        : <WarningPane header={error.header || "Warning"}>{error.message}</WarningPane>
-                )
-            }
             { showHeader &&
                 <header className={style.header}>
-                    <img alt="" src={headerImg} />
+                    <img alt="" className={darkHeaderImg ? style.invert : undefined} src={headerImg} />
                     <h1>{text.header}</h1>
                 </header>
+            }
+            {
+                error &&
+                <Alert type="critical" text={error.header || error.isWarning ? "Warning" : "Error"}>{error.message}</Alert>
+            }
+            { !canSendMessages && canEditRoom &&
+                <Alert type="info" title={"Misconfigured permissions"}>
+                    This room does not permit the bot to send messages.
+                    Please go to the room settings in your client and adjust permissions.
+                </Alert>
             }
             { canEditRoom && <section>
                 <h2>{text.createNew}</h2>
