@@ -1,3 +1,52 @@
+5.1.2 (2024-01-02)
+==================
+
+Bugfixes
+--------
+
+- Fix widget pinning to light theme. ([\#873](https://github.com/matrix-org/matrix-hookshot/issues/873))
+- Fix hookshot failing to format API errors.
+  Only log a stacktrace of API errors on debug level logging, log limited error on info. ([\#874](https://github.com/matrix-org/matrix-hookshot/issues/874))
+- Fix GitHub events not working due to verification failures. ([\#875](https://github.com/matrix-org/matrix-hookshot/issues/875))
+
+
+Internal Changes
+----------------
+
+- Fix spelling of "successfully". ([\#869](https://github.com/matrix-org/matrix-hookshot/issues/869))
+
+
+5.1.1 (2023-12-29)
+==================
+
+Bugfixes
+--------
+
+- Fix widgets not loading when bound to the same listener as "webhooks". ([\#872](https://github.com/matrix-org/matrix-hookshot/issues/872))
+
+
+5.1.0 (2023-12-29)
+==================
+
+Bugfixes
+--------
+
+- Fix feed widget not showing the true values for template / notify on failure. ([\#866](https://github.com/matrix-org/matrix-hookshot/issues/866))
+- Fix widgets failing with "Request timed out". ([\#870](https://github.com/matrix-org/matrix-hookshot/issues/870))
+
+
+Deprecations and Removals
+-------------------------
+
+- The GoNEB migrator is being removed in this release. Users wishing to migrate from GoNEB deployments should use <=5.0.0 and then upgrade. ([\#867](https://github.com/matrix-org/matrix-hookshot/issues/867))
+
+
+Internal Changes
+----------------
+
+- Integrate end to end testing. ([\#869](https://github.com/matrix-org/matrix-hookshot/issues/869))
+
+
 5.0.0 (2023-12-27)
 ==================
 
