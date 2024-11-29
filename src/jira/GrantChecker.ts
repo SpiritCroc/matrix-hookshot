@@ -1,7 +1,7 @@
 import { Appservice } from "matrix-bot-sdk";
 import { JiraProjectConnection } from "../Connections";
 import { GrantChecker } from "../grants/GrantCheck";
-import { UserTokenStore } from "../UserTokenStore";
+import { UserTokenStore } from "../tokens/UserTokenStore";
 
 interface JiraGrantConnectionId{
     url: string;
@@ -26,7 +26,7 @@ export class JiraGrantChecker extends GrantChecker<JiraGrantConnectionId> {
         try {
             await JiraProjectConnection.assertUserHasAccessToProject(this.tokenStore, sender, connectionId.url);
             return true;
-        } catch (ex) {
+        } catch {
             return false;
         }
     }

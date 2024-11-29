@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 import { BridgeConfig, BridgeConfigRoot } from "./Config";
 import { getConfigKeyMetadata, keyIsHidden } from "./Decorators";
 import { Node, YAMLSeq, default as YAML } from "yaml";
@@ -15,10 +17,8 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
         port: 9993,
         bindAddress: "127.0.0.1",
     },
-    queue: {
-        monolithic: true,
-        port: 6379,
-        host: "localhost",
+    cache: {
+        redisUri: "redis://localhost:6379",
     },
     logging: {
         level: "info",
@@ -33,7 +33,7 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
             level: "admin"
         }],
     }],
-    passFile: "passkey.pem",
+    passFile: "./passkey.pem",
     widgets: {
         publicUrl: `${hookshotWebhooksUrl}/widgetapi/v1/static`,
         addToAdminRooms: false,
@@ -66,7 +66,7 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
         oauth: {
             client_id: "foo",
             client_secret: "bar",
-            redirect_uri: `${hookshotWebhooksUrl}/bridge_oauth/`,
+            redirect_uri: `${hookshotWebhooksUrl}/oauth/`,
         },
         webhook: {
             secret: "secrettoken",
@@ -98,7 +98,7 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
         oauth: {
             client_id: "foo",
             client_secret: "bar",
-            redirect_uri: `${hookshotWebhooksUrl}/bridge_oauth/`,
+            redirect_uri: `${hookshotWebhooksUrl}/oauth/`,
         },
     },
     generic: {
@@ -108,6 +108,8 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
         urlPrefix: `${hookshotWebhooksUrl}/webhook/`,
         userIdPrefix: "_webhooks_",
         waitForComplete: false,
+        maxExpiryTime: "30d",
+        sendExpiryNotice: false,
     },
     figma: {
         publicUrl: `${hookshotWebhooksUrl}/hookshot/`,
@@ -151,6 +153,9 @@ export const DefaultConfigRoot: BridgeConfigRoot = {
     sentry: {
         dsn: "https://examplePublicKey@o0.ingest.sentry.io/0",
         environment: "production"
+    },
+    encryption: {
+        storagePath: "./cryptostore"
     }
 };
 
@@ -243,19 +248,16 @@ async function renderRegistrationFile(configPath?: string) {
             rooms: [],
         },
     };
-    // eslint-disable-next-line no-console
+
     console.log(YAML.stringify(obj));
 }
-
 
 // Can be called directly
 if (require.main === module) {
     if (process.argv[2] === '--config') {
-        // eslint-disable-next-line no-console
         console.log(renderDefaultConfig());
     } else if (process.argv[2] === '--registration') {
         renderRegistrationFile(process.argv[3]).catch(ex => {
-            // eslint-disable-next-line no-console
             console.error(ex);
             process.exit(1);
         });

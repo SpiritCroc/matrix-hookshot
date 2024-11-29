@@ -1,7 +1,7 @@
 import EventEmitter from "events";
 import { Intent } from "matrix-bot-sdk";
 import { BridgeConfig } from "./config/Config";
-import { UserTokenStore } from "./UserTokenStore";
+import { UserTokenStore } from "./tokens/UserTokenStore";
 
 
 export enum Category {
@@ -13,7 +13,6 @@ export enum Category {
 
 
 export interface AdminAccountData {
-    // eslint-disable-next-line camelcase
     admin_user: string;
     github?: {
         notifications?: {

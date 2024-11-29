@@ -2,7 +2,7 @@ import { Connection, IConnection, InstantiateConnectionOpts } from "./IConnectio
 import { Appservice, Intent, StateEvent } from "matrix-bot-sdk";
 import { MatrixMessageContent, MatrixEvent } from "../MatrixEvent";
 import markdown from "markdown-it";
-import { UserTokenStore } from "../UserTokenStore";
+import { UserTokenStore } from "../tokens/UserTokenStore";
 import { Logger } from "matrix-appservice-bridge";
 import { CommentProcessor } from "../CommentProcessor";
 import { MessageSenderClient } from "../MatrixSender";
@@ -20,7 +20,6 @@ export interface GitHubIssueConnectionState {
     repo: string;
     state: string;
     issues: string[];
-    // eslint-disable-next-line camelcase
     comments_processed: number;
 }
 

@@ -13,7 +13,7 @@ Hookshot requires the homeserver to be configured with its appservice registrati
 
 ## Local installation
 
-This bridge requires at least Node 16 and Rust installed.
+This bridge requires at least Node 22 and Rust installed.
 
 To install Node.JS, [nvm](https://github.com/nvm-sh/nvm) is a good option.
 
@@ -27,7 +27,12 @@ cd matrix-hookshot
 yarn # or npm i
 ```
 
-Starting the bridge (after configuring it), is a matter of running `yarn start`.
+Starting the bridge (after configuring it), is a matter of setting the `NODE_ENV` environment variable to `production` or `development`, depending if you want [better performance or more verbose logging](https://expressjs.com/en/advanced/best-practice-performance.html#set-node_env-to-production), and then running it:
+
+
+```bash
+NODE_ENV=production yarn start
+```
 
 ## Installation via Docker
 
@@ -115,19 +120,37 @@ Each permission set can have a service. The `service` field can be:
 - `feed`
 - `figma`
 - `webhooks`
+- `challengehound`
 - `*`, for any service.
+
+The `level` determines what permissions a user has access to on the named service(s). They are
+additive, one level grants all previous levels in addition to previous levels.
 
 The `level` can be:
 
 - `commands` Can run commands within connected rooms, but NOT log in to the bridge.
-- `login` All the above, and can also log in to the bridge.
-- `notifications` All the above, and can also bridge their notifications.
+- `login` All the above, and can also log in to supported networks (such as GitHub, GitLab). This is the minimum level required to invite the bridge to rooms.
+- `notifications` All the above, and can also bridge their own notifications. Only supported on GitHub.
 - `manageConnections` All the above, and can create and delete connections (either via the provisioner, setup commands, or state events).
 - `admin` All permissions. This allows you to perform administrative tasks like deleting connections from all rooms.
 
-When permissions are checked, if a user matches any of the permissions set and one
-of those grants the right level for a service, they are allowed access. If none of the
-definitions match, they are denied.
+If any of the permissions matches positively for a user, they are granted access. For example:
+
+```yaml
+permissions:
+  - actor: example.com
+    services:
+      - service: GitHub
+        level: manageConnections
+  - actor: "@badapple:example.com"
+    services:
+      - service: GitHub
+        level: login
+```
+
+would grant `@badapple:example.com` the right to `manageConnections` for GitHub, even though they
+were explicitly named for a lower permission.
+
 
 #### Example
 
@@ -221,6 +244,20 @@ In terms of API endpoints:
 Please note that the appservice HTTP listener is configured <strong>separately</strong> from the rest of the bridge (in the `homeserver` section) due to lack of support
 in the upstream library. See <a href="https://github.com/turt2live/matrix-bot-sdk/issues/191">this issue</a> for details.
 </section>
+
+### Cache configuration
+
+You can optionally enable a Redis-backed cache for Hookshot. This is generally a good thing to enable if you can
+afford to, as it will generally improve startup times. Some features such as resuming RSS/Atom feeds between restarts
+is also only possible with a external cache.
+
+To enable, simply set:
+
+```yaml
+cache:
+  redisUri: "redis://redis-host:3679"
+```
+
 
 ### Services configuration
 

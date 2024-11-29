@@ -7,15 +7,9 @@ import type {Config} from 'jest';
 
 const config: Config = {
   // The root directory that Jest should scan for tests and modules within
-  rootDir: "spec",
+  rootDir: "spec-lib",
   testTimeout: 60000,
-  transform: {
-    '^.+\\.tsx?$': [
-      'ts-jest',
-      {
-      },
-    ],
-  },
+  setupFiles: ["<rootDir>/spec/setup-jest.js"],
 };
 
 export default config;

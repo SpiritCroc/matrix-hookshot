@@ -4,6 +4,8 @@ import { Logger } from "matrix-appservice-bridge";
 import { ApiError, ErrCode } from "../api";
 import { GenericWebhookEvent, GenericWebhookEventResult } from "./types";
 import * as xml from "xml2js";
+import helmet from "helmet";
+import { StatusCodes } from "http-status-codes";
 
 const WEBHOOK_RESPONSE_TIMEOUT = 5000;
 
@@ -41,21 +43,21 @@ export class GenericWebhooksRouter {
                     next();
                     return;
                 }
-                res.status(404).send({ok: false, error: "Webhook not found"});
+                res.status(StatusCodes.NOT_FOUND).send({ok: false, error: "Webhook not found"});
             } else if (response.successful) {
                 const body = response.response?.body ?? {ok: true};
                 if (response.response?.contentType) {
                     res.contentType(response.response.contentType);
                 }
-                res.status(response.response?.statusCode ?? 200).send(body);
+                res.status(response.response?.statusCode ?? StatusCodes.OK).send(body);
             } else if (response.successful === false) {
-                res.status(500).send({ok: false, error: "Failed to process webhook"});
+                res.status(response.statusCode ?? StatusCodes.INTERNAL_SERVER_ERROR).send({ok: false, error: response.error || "Failed to process webhook"});
             } else {
-                res.status(202).send({ok: true});
+                res.status(StatusCodes.ACCEPTED).send({ok: true});
             }
         }).catch((err) => {
             log.error(`Failed to emit payload: ${err}`);
-            res.status(500).send({ok: false, error: "Failed to handle webhook"});
+            res.status(StatusCodes.INTERNAL_SERVER_ERROR).send({ok: false, error: "Failed to handle webhook"});
         });
     }
 
@@ -83,6 +85,17 @@ export class GenericWebhooksRouter {
         const router = Router();
         router.all(
             '/:hookId',
+            helmet({
+                contentSecurityPolicy: {
+                    useDefaults: true,
+                    directives: {
+                        defaultSrc: "'self'",
+                        sandbox: ''
+                    }
+                },
+                xFrameOptions: { action: 'deny'},
+                crossOriginResourcePolicy: { policy: 'same-site'} ,
+            }),
             GenericWebhooksRouter.xmlHandler,
             express.urlencoded({ extended: false }),
             express.json(),

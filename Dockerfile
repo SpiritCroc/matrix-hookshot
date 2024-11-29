@@ -1,7 +1,7 @@
 # Stage 0: Build the thing
 # Need debian based image to build the native rust module
 # as musl doesn't support cdylib
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 # Needed in order to build rust FFI bindings.
 RUN apt-get update && apt-get install -y build-essential cmake curl pkg-config pkg-config libssl-dev
@@ -29,7 +29,7 @@ RUN yarn build
 
 
 # Stage 1: The actual container
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /bin/matrix-hookshot
 
@@ -44,6 +44,8 @@ RUN yarn --network-timeout 600000 --production --pure-lockfile && yarn cache cle
 COPY --from=builder /src/lib ./
 COPY --from=builder /src/public ./public
 COPY --from=builder /src/assets ./assets
+
+ENV NODE_ENV="production"
 
 VOLUME /data
 EXPOSE 9993

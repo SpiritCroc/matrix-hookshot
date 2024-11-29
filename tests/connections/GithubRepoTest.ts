@@ -1,7 +1,7 @@
 import { GitHubRepoConnection, GitHubRepoConnectionState } from "../../src/Connections/GithubRepo"
 import { GithubInstance } from "../../src/github/GithubInstance";
 import { createMessageQueue } from "../../src/MessageQueue";
-import { UserTokenStore } from "../../src/UserTokenStore";
+import { UserTokenStore } from "../../src/tokens/UserTokenStore";
 import { DefaultConfig } from "../../src/config/Defaults";
 import { AppserviceMock } from "../utils/AppserviceMock";
 import { ApiError, ErrCode, ValidatorApiError } from "../../src/api";
@@ -37,9 +37,7 @@ const GITHUB_ISSUE_CREATED_PAYLOAD = {
 };
 
 function createConnection(state: Record<string, unknown> = {}, isExistingState=false) {
-	const mq = createMessageQueue({
-		monolithic: true
-	});
+	const mq = createMessageQueue();
 	mq.subscribe('*');
 	const as = AppserviceMock.create();
 	const intent = as.getIntentForUserId('@github:example.test');
@@ -57,7 +55,6 @@ function createConnection(state: Record<string, unknown> = {}, isExistingState=f
 		"state_key",
 		githubInstance,
 		// Default config always contains GitHub
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		DefaultConfig.github!
 	);
 	return {connection, intent: intent as IntentMock};
@@ -86,6 +83,7 @@ describe("GitHubRepoConnection", () => {
 				}
 			} as GitHubRepoConnectionState as unknown as Record<string, unknown>);
 		});
+
 		it("will convert ignoredHooks for existing state", () => {
 			const state = GitHubRepoConnection.validateState({
 				org: "foo",
@@ -96,6 +94,7 @@ describe("GitHubRepoConnection", () => {
 			} as GitHubRepoConnectionState as unknown as Record<string, unknown>, true);
 			expect(state.enableHooks).to.not.contain('issue');
 		});
+
 		it("will disallow invalid state", () => {
 			try {
 				GitHubRepoConnection.validateState({
@@ -108,6 +107,7 @@ describe("GitHubRepoConnection", () => {
 				}
 			}
 		});
+
 		it("will disallow enabledHooks to contains invalid enums if this is new state", () => {
 			try {
 				GitHubRepoConnection.validateState({
@@ -121,6 +121,7 @@ describe("GitHubRepoConnection", () => {
 				}
 			}
 		});
+
 		it("will allow enabledHooks to contains invalid enums if this is old state", () => {
 			GitHubRepoConnection.validateState({
 				org: "foo",
@@ -129,6 +130,7 @@ describe("GitHubRepoConnection", () => {
 			}, true);
 		});
 	});
+
 	describe("onIssueCreated", () => {
 		it("will handle a simple issue", async () => {
 			const { connection, intent } = createConnection();
@@ -138,6 +140,7 @@ describe("GitHubRepoConnection", () => {
 			intent.expectEventBodyContains(GITHUB_ISSUE_CREATED_PAYLOAD.issue.html_url, 0);
 			intent.expectEventBodyContains(GITHUB_ISSUE_CREATED_PAYLOAD.issue.title, 0);
 		});
+
 		it("will handle assignees on issue creation", async () => {
 			const { connection, intent } = createConnection();
 			await connection.onIssueCreated({
@@ -153,6 +156,7 @@ describe("GitHubRepoConnection", () => {
 			intent.expectEventBodyContains(GITHUB_ISSUE_CREATED_PAYLOAD.issue.html_url, 0);
 			intent.expectEventBodyContains(GITHUB_ISSUE_CREATED_PAYLOAD.issue.title, 0);
 		});
+
 		it("will filter out issues not matching includingLabels.", async () => {
 			const { connection, intent } = createConnection({
 				includingLabels: ["include-me"]
@@ -170,6 +174,7 @@ describe("GitHubRepoConnection", () => {
 			await connection.onIssueCreated(GITHUB_ISSUE_CREATED_PAYLOAD as never);
 			intent.expectNoEvent();
 		});
+
 		it("will filter out issues matching excludingLabels.", async () => {
 			const { connection, intent } = createConnection({
 				excludingLabels: ["exclude-me"]
@@ -185,6 +190,7 @@ describe("GitHubRepoConnection", () => {
 			} as never);
 			intent.expectNoEvent();
 		});
+
 		it("will include issues matching includingLabels.", async () => {
 			const { connection, intent } = createConnection({
 				includingIssues: ["include-me"]

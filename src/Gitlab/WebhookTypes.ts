@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 export interface IGitLabWebhookEvent {
     object_kind: string;
 }
@@ -64,9 +62,9 @@ export interface IGitLabWebhookMREvent {
     object_attributes: IGitLabMergeRequestObjectAttributes;
     labels: IGitLabLabel[];
     changes: {
-        [key: string]: {
-            before: string;
-            after: string;
+        draft?: {
+            previous: boolean;
+            current: boolean;
         }
     }
 }

@@ -1,9 +1,7 @@
 import { expect } from "chai";
 import { createMessageQueue } from "../src/MessageQueue/MessageQueue";
 
-const mq = createMessageQueue({
-    monolithic: true,
-});
+const mq = createMessageQueue();
 
 describe("MessageQueueTest", () => {
     describe("LocalMq", () => {
@@ -25,6 +23,7 @@ describe("MessageQueueTest", () => {
                 data: 51,
             });
         });
+
         it("should be able to push an event, and respond to it", async () => {
             mq.subscribe("fakeevent2");
             mq.subscribe("response.fakeevent2");
